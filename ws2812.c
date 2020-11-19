@@ -53,11 +53,51 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 	printf("mem at %p size %x\n",mem,mem_size);
-	uint32_t *mem32ws=(uint32_t *)(mem+0x10);
+        uint8_t init_pins_out[]={6,8,10,12,14};
+	mem[0]=5;
+        for(int i=mem[0];i>0;i--){
+                mem[i]=init_pins_out[i-1];
+        }
+ 
+        uint8_t init_pins_in[]={7,9,11,13,32,32,32,32};
+        for(int i=7;i>=0;i--){
+                mem[8+i]=init_pins_in[i];
+        }
+	uint32_t *mem32ws=(uint32_t *)(mem+0x80);
 
 	printf("read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
 	if(argc>0){
-		int handle = gpio_open_device("/dev/gpioc2");
+                int gpio2 = gpio_open_device("/dev/gpioc2");
+		if (gpio2 == GPIO_INVALID_HANDLE)
+			err(EXIT_FAILURE, "Cannot open gpioc");
+                for(int i=sizeof(init_pins_in)-1;i>=0;i--){
+                        printf("config pin %d %d\n",i,init_pins_in[i]);
+                        if(init_pins_in[i]>31) continue;
+                        gpio_config_t pin_config;
+                        pin_config.g_pin = init_pins_in[i];
+                        pin_config.g_flags = GPIO_PIN_INPUT | GPIO_PIN_PULLDOWN;
+                        int res = gpio_pin_set_flags(gpio2, &pin_config);
+                        if (res < 0)
+                                err(EXIT_FAILURE, "configuration of pin %d "
+                                                "failed (flags=%d)", pin_config.g_pin, 
+                                                pin_config.g_flags);
+                }
+
+                for(int i=sizeof(init_pins_out)-1;i>=0;i--){
+                        printf("config pin %d %d\n",i,init_pins_out[i]);
+                        gpio_config_t pin_config;
+                        pin_config.g_pin = init_pins_out[i];
+                        pin_config.g_flags = GPIO_PIN_OUTPUT;
+                        int res = gpio_pin_set_flags(gpio2, &pin_config);
+                        if (res < 0)
+                                err(EXIT_FAILURE, "configuration of pin %d "
+                                                "failed (flags=%d)", pin_config.g_pin, 
+                                                pin_config.g_flags);
+                }
+
+
+
+		int handle = gpio_open_device("/dev/gpioc1");
 		if (handle == GPIO_INVALID_HANDLE)
 			err(EXIT_FAILURE, "Cannot open gpioc");
 		gpio_config_t pin_config;
@@ -81,7 +121,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		*/
-		mem32ws[1]=0x05; //led length
+		mem32ws[1]=0x0a; //led length
 		mem32ws[2]=1<<23;
 		mem32ws[3]=1<<15;
 		mem32ws[4]=1<<7;
@@ -115,23 +155,30 @@ int main(int argc, char* argv[]) {
 
 	}
 
-        int x=5;
+
+        
+        int x=50;
 	while(x-- > 0){
-		sleep(1);
+                usleep(500000);
 		printf("| read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
-		for(int i=2;i<=6;i++){
+		for(int i=2;i<=11;i++){
 			switch(rand() % 6){
-				case 0: mem32ws[i]=0x660000; break;
-				case 1: mem32ws[i]=0x006600; break;
-				case 2: mem32ws[i]=0x000066; break;
-				case 3: mem32ws[i]=0x666600; break;
-				case 4: mem32ws[i]=0x660066; break;
-				case 5: mem32ws[i]=0x006666; break;
+				case 0: mem32ws[i]=0x330000; break;
+				case 1: mem32ws[i]=0x003300; break;
+				case 2: mem32ws[i]=0x000033; break;
+				case 3: mem32ws[i]=0x333300; break;
+                                case 4: mem32ws[i]=0x330033; break;
+				case 5: mem32ws[i]=0x333333; break;
 			}
 		}
 		mem32ws[0]=0x01;
-		mem32ws[1]=0x05;
+		mem32ws[1]=0x0a;
 		printf(". read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
+
+                for(int i=0;i<=31;i++){
+                       printf("%02x ",mem[i]); 
+                       if(i%16==15) printf("\n");
+                }
 	}
 
         /*

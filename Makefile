@@ -7,12 +7,12 @@ CFLAGS=-c -Wall -I/usr/local/include
 LIBS=-L/usr/local/lib -lpru -lgpio
 
 PASM=pasm
-PASMFLAGS=-b
+PASMFLAGS=-b -V3
 
-all: pru_ws2812.bin
+all: pru_ws2812.bin ws2812
 # pru_blink
 
-pru_ws2812.bin: pru_ws2812.p ws2812
+pru_ws2812.bin: pru_ws2812.p pru_keyboard.p
 	$(PASM) $(PASMFLAGS) pru_ws2812.p
 
 ws2812: ws2812.o

@@ -3,6 +3,7 @@
 
 #include "pru_gpio.hp"  // include the GPIO driver
 #include "pru_delay.hp" // include the delay driver
+#include "pru_keyboard.p"
 
 #define GPIO_MODULE        GPIO1
 #define GPIO_PIN           28
@@ -37,8 +38,6 @@ TRLED_NXT:
 .endm
 
 
-
-
 #define T0H 36
 #define T0L 78
 #define T1H 75
@@ -61,14 +60,24 @@ START:
         // Clear SYSCFG[STANDBY_INIT] to enable OCP master port:
         lbco r0, REG_SYSCFG, 4, 4  // These three instructions are required
         clr r0, r0, 4              // to initialize the PRU
-        sbco r0, REG_SYSCFG, 4, 4  //
+        sbco r0, REG_SYSCFG, 4, 4
         MOV     r0, 0x120
         MOV     r1, 0x22028
         SBBO    r0, r1, 0, 4
 
+        init_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+        poll_keyboard
+
 LED_START:
 
-        mov r8, 0x10 //ws2812 data in pru memory offset
+        mov r8, 0x80 //ws2812 data in pru memory offset
         mov r6, 0
         sbbo &r6, r8, 0, 4
 
@@ -100,6 +109,9 @@ LED_FIN:
 
 
 WAIT_NEXT:
+        delayms 10 
+        poll_keyboard
+
         lbbo &r6, r8, 0, 4
         qbeq WAIT_NEXT, r6, 0
 
