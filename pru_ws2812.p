@@ -64,6 +64,7 @@ START:
         MOV     r0, 0x120
         MOV     r1, 0x22028
         SBBO    r0, r1, 0, 4
+        MOV r31, 32
 
         init_keyboard
         poll_keyboard
@@ -105,7 +106,7 @@ LED_FIN:
         // This sends an interrupt to the kernel, which the uio_pruss driver
         // forwards to the pru_blink executable to tell it that the program
         // has finished executing:
-        mov r31.b0, PRU0_ARM_INTERRUPT+16
+//        mov r31.b0, PRU0_ARM_INTERRUPT+16
 
 
 WAIT_NEXT:

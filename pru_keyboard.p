@@ -1,4 +1,5 @@
 #define KEY_GPIO_MODULE        GPIO2
+#define PRU0_ARM_INT  19
 
 .macro cleargpior11
         mov r0, 1
@@ -45,9 +46,37 @@ SKIP_BTN:
 
 ENDLOOP:
         cleargpior11
-        mov r0, 16
+        mov r0, 15
+        lbbo r3, r0, r10, 1 //previuos value
         sbbo r2, r0, r10, 1
 
+        xor r3, r2, r3 //changes
+
+        qbeq END_STORE, r3, 0
+
+        and r4, r3, r2 //pressed
+        not r5, r2
+        and r5, r5, r3 //depressed
+
+        mov r0, 15+8
+        lbbo r2, r0, r10, 1
+        or r2, r2, r3
+        sbbo r2, r0, r10, 1
+
+        mov r0, 31
+        lbbo r2, r0, r10, 1
+        or r2, r2, r4
+        sbbo r2, r0, r10, 1
+
+        mov r0, 31+8
+        lbbo r2, r0, r10, 1
+        or r2, r2, r5
+        sbbo r2, r0, r10, 1
+
+        MOV r31, 32
+        //mov r31.b0, PRU0_ARM_INT+16
+
+END_STORE:
 
         sub r10, r10, 1
         qbne NEXT_BIT, r10, 0
