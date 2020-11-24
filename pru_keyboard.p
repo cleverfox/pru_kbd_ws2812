@@ -35,6 +35,7 @@
         mov r2, 0
 
 loop ENDLOOP, 8
+        mov r13, 0
         lbbo r13, r3, 0, 1
         qblt SKIP_BTN, r13, 31
         getgpio KEY_GPIO_MODULE, r13

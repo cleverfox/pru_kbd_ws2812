@@ -10,10 +10,14 @@
 #include <libpru.h>
 #include <libgpio.h>
 #include <sys/event.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
 
 #define FWBIN  "pru_ws2812.bin"
 #define	AM33XX_MMAP_SIZE	0x00040000
-#define ws2812_ram_offset 0x10
+#define ws2812_ram_offset 0x80
 
 int main(int argc, char* argv[]) {
 	size_t i;
@@ -23,8 +27,6 @@ int main(int argc, char* argv[]) {
 	int saved_errno = 0;
 	int error;
 	sranddev();
-	unlink("/tmp/hmi.fifo");
-	mkfifo("/tmp/hmi.fifo",0666);
 
 	snprintf(dev, sizeof(dev), "/dev/pruss%zu", 0);
 	fd = open(dev, O_RDWR);
@@ -63,7 +65,7 @@ int main(int argc, char* argv[]) {
 	for(int i=7;i>=0;i--){
 		mem[8+i]=init_pins_in[i];
 	}
-	uint32_t *mem32ws=(uint32_t *)(mem+0x80);
+	uint32_t *mem32ws=(uint32_t *)(mem+ws2812_ram_offset);
 
 	printf("read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
 
@@ -140,10 +142,17 @@ int main(int argc, char* argv[]) {
 	}
 
 	int irqfd = open( "/dev/pruss0.irq2", O_RDONLY);
-        if (irqfd == -1) perror("open");
-	int fifofd = open( "/tmp/hmi.fifo", O_RDWR);
-        if (fifofd == -1) perror("open");
+        if (irqfd == -1) perror("open pru");
+	int fifofd = socket(PF_INET6, SOCK_DGRAM, 0);
+        if (fifofd == -1) perror("open sock");
+	struct sockaddr_in6 su = {.sin6_len = sizeof(struct sockaddr_in6),
+		.sin6_family = AF_INET6,
+		.sin6_addr   = IN6ADDR_LOOPBACK_INIT,
+		.sin6_port=htons(15661)
+	};
 
+	error=bind(fifofd, (struct sockaddr*)&su, sizeof(su));
+	if(error==-1){ perror("bind"); }
 
 	int kq=kqueue();
 	struct kevent changelist[2];
@@ -155,6 +164,10 @@ int main(int argc, char* argv[]) {
 	if (changelist->flags & EV_ERROR)
 		errx(EXIT_FAILURE, "Event error: %s", strerror(changelist->data));
 
+	struct sockaddr_in6 client_addr;
+	client_addr.sin6_family=AF_INET6;
+	socklen_t client_addr_len=sizeof(struct sockaddr_in6);
+
 	struct kevent evlist[2];
 	for (;;) {
 		int nev = kevent(kq, NULL, 0, evlist, 2, NULL);
@@ -164,16 +177,25 @@ int main(int argc, char* argv[]) {
 		for(int i=0;i<nev;i++){
 			if(evlist[i].ident==irqfd){
 				printf("IRQ\n");
-				/*uint64_t time;
-				  if(read(fd, &time, sizeof(time)) > 0 ) {
-				  printf("=> %llu.%09llu \n", time/1000000000, time%1000000000);
-				  }*/
 				for(int i=32;i<48;i++){
 					printf("%02x ",mem[i]);
 					if(i%16==15) printf("\n");
 				}
+				int l=sendto(fifofd, "xxx", 3, 0, (struct sockaddr*)&client_addr, client_addr_len);
+				if (l == -1) perror("write");
+				printf("Write %d\n",l);
 				bzero(mem+24,24);
+			} 
+			if(evlist[i].ident==fifofd){
+				char* buf[32];
+				int l=recvfrom(fifofd, buf, 32, 0, (struct sockaddr*)&client_addr, &client_addr_len);
+				printf("Read %d\n",l);
+				if (l == -1) perror("read");
+				char addrbuf[64];
+				inet_ntop(client_addr.sin6_family,&client_addr.sin6_addr,addrbuf,64);
+				printf("got from %s:%d\n", addrbuf, htons(client_addr.sin6_port));
 
+				/*
 				for(int i=2;i<=11;i++){
 					switch(rand() % 6){
 						case 0: mem32ws[i]=0x330000; break;
@@ -184,13 +206,17 @@ int main(int argc, char* argv[]) {
 						case 5: mem32ws[i]=0x333333; break;
 					}
 				}
-				mem32ws[0]=0x01;
 				mem32ws[1]=0x0a;
-			}else if(evlist[i].ident==fifofd){
-				char* buf[32];
-				int l=read(fifofd, buf,1);
-				printf("Read %d\n",l);
-
+				*/
+				mem32ws[0]=0x01;
+				switch(rand() % 6){
+					case 0: mem32ws[2]=0x330000; break;
+					case 1: mem32ws[2]=0x003300; break;
+					case 2: mem32ws[2]=0x000033; break;
+					case 3: mem32ws[2]=0x333300; break;
+					case 4: mem32ws[2]=0x330033; break;
+					case 5: mem32ws[2]=0x333333; break;
+				}
 			}else {
 				printf("unknown fd %d\n",evlist[i].ident);
 			}
