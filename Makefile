@@ -4,7 +4,7 @@
 # to assemble the PRU binary and build the C loader.
 
 CFLAGS=-c -Wall -I/usr/local/include
-LIBS=-L/usr/local/lib -lpru
+LIBS=-L/usr/local/lib -lpru -lgpio
 
 PASM=pasm
 PASMFLAGS=-b

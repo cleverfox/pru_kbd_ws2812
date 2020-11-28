@@ -2,21 +2,26 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <err.h>
 #include <stdint.h>
 #include <fcntl.h>
 #include <string.h>
 #include <libpru.h>
+#include <libgpio.h>
 
 #define FWBIN  "pru_ws2812.bin"
 #define	AM33XX_MMAP_SIZE	0x00040000
+#define ws2812_ram_offset 0x10
 
-int main() {
+int main(int argc, char* argv[]) {
 	size_t i;
 	int fd = 0;
 	char dev[64];
 	size_t mmap_sizes[2] = { AM33XX_MMAP_SIZE };
 	int saved_errno = 0;
         int error;
+        sranddev();
 
 	for (i = 0; i < 4; i++) {
 		snprintf(dev, sizeof(dev), "/dev/pruss%zu", 0);
@@ -48,60 +53,86 @@ int main() {
 		return -1;
 	}
 	printf("mem at %p size %x\n",mem,mem_size);
-	uint32_t *mem32=(uint32_t *)mem;
-	printf("read %x %x %x %x\n",mem32[0],mem32[1],mem32[2],mem32[3]);
-        srand();
-	mem32[0]=0x01;
-	mem32[1]=0x05;
-        for(int i=2;i<=6;i++){
-                switch(rand() % 3){
-                        case 0: mem32[i]=0x660000; break;
-                        case 1: mem32[i]=0x006600; break;
-                        case 2: mem32[i]=0x000066; break;
-                        case 3: mem32[i]=0x666600; break;
-                        case 4: mem32[i]=0x660066; break;
-                        case 5: mem32[i]=0x006666; break;
-                }
-        }
+	uint32_t *mem32ws=(uint32_t *)(mem+0x10);
 
-	printf("read %x %x %x %x\n",mem32[0],mem32[1],mem32[2],mem32[3]);
-        pru_t pru;
-        pru=pru_alloc(PRU_TYPE_TI);
-        if (pru == NULL) {
-                fprintf(stderr, "unable to allocate PRU structure: %s\n", strerror(errno));
-                return 3;
-        }
-        pru_reset(pru, 0);
+	printf("read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
+	if(argc>0){
+		int handle = gpio_open_device("/dev/gpioc2");
+		if (handle == GPIO_INVALID_HANDLE)
+			err(EXIT_FAILURE, "Cannot open gpioc");
+		gpio_config_t pin_config;
+		pin_config.g_pin = 28;
+		pin_config.g_flags = GPIO_PIN_OUTPUT;
+		int res = gpio_pin_set_flags(handle, &pin_config);
+                if (res < 0)
+                        err(EXIT_FAILURE, "configuration of pin %d "
+                            "failed (flags=%d)", pin_config.g_pin, 
+                            pin_config.g_flags);
 
-        error = pru_upload(pru, 0, FWBIN);
-        if (error) {
-                fprintf(stderr, "unable to upload %s: %s\n", FWBIN, strerror(errno));
-                return 5;
-        }
+		/*
+		for(int i=2;i<=6;i++){
+			switch(rand() % 3){
+				case 0: mem32ws[i]=0x660000; break;
+				case 1: mem32ws[i]=0x006600; break;
+				case 2: mem32ws[i]=0x000066; break;
+				case 3: mem32ws[i]=0x666600; break;
+				case 4: mem32ws[i]=0x660066; break;
+				case 5: mem32ws[i]=0x006666; break;
+			}
+		}
+		*/
+		mem32ws[1]=0x05; //led length
+		mem32ws[2]=1<<23;
+		mem32ws[3]=1<<15;
+		mem32ws[4]=1<<7;
+		mem32ws[5]=1<<7|1<<15;
+		mem32ws[6]=1<<15|1<<23;
+		mem32ws[0]=0x01; //data ready
 
-        //pru_write_reg(pru, 0, REG_R30, 0);
+		printf("read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
 
-        error = pru_enable(pru, 0, 0);
-        if (error) {
-                fprintf(stderr, "unable to enable PRU %d\n", 0);
-                return 6;
-        }
+		pru_t pru;
+		pru=pru_alloc(PRU_TYPE_TI);
+		if (pru == NULL) {
+			fprintf(stderr, "unable to allocate PRU structure: %s\n", strerror(errno));
+			return 3;
+		}
+		pru_reset(pru, 0);
+
+		error = pru_upload(pru, 0, FWBIN);
+		if (error) {
+			fprintf(stderr, "unable to upload %s: %s\n", FWBIN, strerror(errno));
+			return 5;
+		}
+
+		//pru_write_reg(pru, 0, REG_R30, 0);
+
+		error = pru_enable(pru, 0, 0);
+		if (error) {
+			fprintf(stderr, "unable to enable PRU %d\n", 0);
+			return 6;
+		}
+
+	}
 
         int x=5;
-        while(x-- > 0){
-        sleep(1);
-	mem32[0]=0x01;
-        for(int i=1;i<6;i++){
-                switch(rand() % 3){
-                        case 0: mem32[i]=0x660000; break;
-                        case 1: mem32[i]=0x006600; break;
-                        case 2: mem32[i]=0x000066; break;
-                        case 3: mem32[i]=0x666600; break;
-                        case 4: mem32[i]=0x660066; break;
-                        case 5: mem32[i]=0x006666; break;
-                }
-        }
-        }
+	while(x-- > 0){
+		sleep(1);
+		printf("| read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
+		for(int i=2;i<=6;i++){
+			switch(rand() % 6){
+				case 0: mem32ws[i]=0x660000; break;
+				case 1: mem32ws[i]=0x006600; break;
+				case 2: mem32ws[i]=0x000066; break;
+				case 3: mem32ws[i]=0x666600; break;
+				case 4: mem32ws[i]=0x660066; break;
+				case 5: mem32ws[i]=0x006666; break;
+			}
+		}
+		mem32ws[0]=0x01;
+		mem32ws[1]=0x05;
+		printf(". read %x %x %x %x\n",mem32ws[0],mem32ws[1],mem32ws[2],mem32ws[3]);
+	}
 
         /*
         printf("r30: %x\n", pru_read_reg(pru, 0, REG_R30));
@@ -110,11 +141,11 @@ int main() {
         */
 
         //sleep(1);
-	//mem32[5]=0x660000;
-	//mem32[4]=0x006600;
-	//mem32[3]=0x000066;
-	//mem32[2]=0x660066;
-	//mem32[1]=0x006666;
+	//mem32ws[5]=0x660000;
+	//mem32ws[4]=0x006600;
+	//mem32ws[3]=0x000066;
+	//mem32ws[2]=0x660066;
+	//mem32ws[1]=0x006666;
 
         //pru_write_reg(pru, 0, REG_R30, 1);
 
